@@ -1,3 +1,7 @@
+// Package bot implements Telegram bot handlers for local community chat.
+//
+// It provides functionality for news generation using Gemini AI and
+// basic command handling (/start, /news).
 package bot
 
 import (
@@ -9,6 +13,12 @@ import (
 	"github.com/mymmrac/telego/telegoutil"
 )
 
+// news handles the /news command. It sends a "recording" message, generates
+// a localized news article via Gemini AI, deletes the temporary message,
+// and sends the generated news to the chat.
+//
+// The prompt asks Gemini to recall a real positive event from rural Russia
+// and adapt it to the local context of Surskoye.
 func (b *Bot) news(ctx context.Context, chatID telego.ChatID, prompts *config.PromptsConfig) {
 	msg, _ := b.bot.SendMessage(ctx, telegoutil.Message(chatID, prompts.Messages.Recording))
 
@@ -16,15 +26,27 @@ func (b *Bot) news(ctx context.Context, chatID telego.ChatID, prompts *config.Pr
 	news, err := b.gemini.Ask(prompts.News.System, userPrompt, false)
 	if err != nil {
 		logger.Error("Gemini error", "error", err)
-		b.bot.SendMessage(ctx, telegoutil.Message(chatID, prompts.Messages.Error))
+		_, err = b.bot.SendMessage(ctx, telegoutil.Message(chatID, prompts.Messages.Error))
+		if err != nil {
+			logger.Error("Error sending message", "error", err)
+		}
 		return
 	}
 
 	// Delete "recording..." message and send the news
-	b.bot.DeleteMessage(ctx, telegoutil.Delete(chatID, msg.MessageID))
-	b.bot.SendMessage(ctx, telegoutil.Message(chatID, "📡 "+news))
+	if err = b.bot.DeleteMessage(ctx, telegoutil.Delete(chatID, msg.MessageID)); err != nil {
+		logger.Error("Error deleting bot message", "error", err)
+	}
+	_, err = b.bot.SendMessage(ctx, telegoutil.Message(chatID, "📡 "+news))
+	if err != nil {
+		logger.Error("Error sending message", "error", err)
+	}
 }
 
+// start handles the /start command. It sends a welcome message to the chat.
 func (b *Bot) start(ctx context.Context, chatID telego.ChatID, prompts *config.PromptsConfig) {
-	b.bot.SendMessage(ctx, telegoutil.Message(chatID, prompts.Messages.Welcome))
+	_, err := b.bot.SendMessage(ctx, telegoutil.Message(chatID, prompts.Messages.Welcome))
+	if err != nil {
+		logger.Error("Error sending message", "error", err)
+	}
 }

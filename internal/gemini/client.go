@@ -1,3 +1,8 @@
+// Package gemini provides a simple client for Google's Gemini API.
+//
+// It supports text generation with optional system instructions and
+// Google Search grounding. The client is minimal and focused on
+// the specific needs of the Telegram bot.
 package gemini
 
 import (
@@ -6,12 +11,20 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/centaur-vova/telegram-go-chat-skeleton/internal/logger"
 )
 
+// Client is a Gemini API client configured with model and API key.
 type Client struct {
 	url string
 }
 
+// New creates a new Gemini client for the given model name and API key.
+//
+// Example:
+//
+//	client := gemini.New("gemini-flash-latest", os.Getenv("GEMINI_API_KEY"))
 func New(modelName string, apiKey string) *Client {
 	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", modelName, apiKey)
 
@@ -20,33 +33,43 @@ func New(modelName string, apiKey string) *Client {
 	}
 }
 
-// Google search
-type GoogleSearch struct{}
+// / googleSearch enables grounding with Google Search when included in Tools.
+type googleSearch struct{}
 
-type Tool struct {
-	GoogleSearch *GoogleSearch `json:"googleSearch,omitempty"`
+// Tool represents a tool that Gemini can use, such as Google Search.
+
+type tool struct {
+	GoogleSearch *googleSearch `json:"googleSearch,omitempty"`
 }
 
-// Gemini API request structures
-type GeminiPart struct {
+// geminiPart represents a single part of the message content (text, image, etc.).
+type geminiPart struct {
 	Text string `json:"text"`
 }
 
-type GeminiContent struct {
-	Parts []GeminiPart `json:"parts"`
+// GeminiContent represents a message content consisting of multiple parts.
+
+type geminiContent struct {
+	Parts []geminiPart `json:"parts"`
 }
 
-type SystemInstruction struct {
-	Parts []GeminiPart `json:"parts"`
+// SystemInstruction holds the system-level instructions for the model.
+
+type systemInstruction struct {
+	Parts []geminiPart `json:"parts"`
 }
 
-type GeminiRequest struct {
-	SystemInstruction *SystemInstruction `json:"systemInstruction,omitempty"`
-	Contents          []GeminiContent    `json:"contents"`
-	Tools             []Tool             `json:"tools,omitempty"`
+// GeminiRequest is the request payload for the Gemini generateContent endpoint.
+
+type geminiRequest struct {
+	SystemInstruction *systemInstruction `json:"systemInstruction,omitempty"`
+	Contents          []geminiContent    `json:"contents"`
+	Tools             []tool             `json:"tools,omitempty"`
 }
 
-type GeminiResponse struct {
+// GeminiResponse is the response payload from the Gemini generateContent endpoint.
+
+type geminiResponse struct {
 	Candidates []struct {
 		Content struct {
 			Parts []struct {
@@ -56,20 +79,20 @@ type GeminiResponse struct {
 	} `json:"candidates"`
 }
 
-// askGemini sends a prompt to Gemini API and returns generated text
+// Ask sends a prompt to Gemini API and returns generated text
 func (c *Client) Ask(systemPrompt, userPrompt string, search bool) (string, error) {
-	var tools []Tool
+	var tools []tool
 	if search {
-		tools = []Tool{
-			{GoogleSearch: &GoogleSearch{}},
+		tools = []tool{
+			{GoogleSearch: &googleSearch{}},
 		}
 	}
-	reqBody := GeminiRequest{
-		Contents: []GeminiContent{
-			{Parts: []GeminiPart{{Text: userPrompt}}},
+	reqBody := geminiRequest{
+		Contents: []geminiContent{
+			{Parts: []geminiPart{{Text: userPrompt}}},
 		},
-		SystemInstruction: &SystemInstruction{
-			Parts: []GeminiPart{{Text: systemPrompt}},
+		SystemInstruction: &systemInstruction{
+			Parts: []geminiPart{{Text: systemPrompt}},
 		},
 		Tools: tools,
 	}
@@ -83,7 +106,12 @@ func (c *Client) Ask(systemPrompt, userPrompt string, search bool) (string, erro
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Error("Error closing body", "error", err)
+		}
+
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -92,16 +120,16 @@ func (c *Client) Ask(systemPrompt, userPrompt string, search bool) (string, erro
 
 	// Google API errors
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Google API error (Status %d): %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("google API error (Status %d): %s", resp.StatusCode, string(body))
 	}
 
-	var geminiResp GeminiResponse
+	var geminiResp geminiResponse
 	if err := json.Unmarshal(body, &geminiResp); err != nil {
 		return "", err
 	}
 
 	if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
-		return "", fmt.Errorf("Empty response received")
+		return "", fmt.Errorf("empty response received")
 	}
 
 	return geminiResp.Candidates[0].Content.Parts[0].Text, nil

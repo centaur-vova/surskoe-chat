@@ -1,3 +1,7 @@
+// Command bot is a Telegram bot for local community chat.
+//
+// It listens for /start and /news commands, generates localized news
+// using Gemini AI, and handles graceful shutdown on interrupt.
 package main
 
 import (

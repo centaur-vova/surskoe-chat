@@ -1,3 +1,7 @@
+// Package bot implements the Telegram bot core functionality.
+//
+// It provides bot setup, long polling subscription, and command dispatching
+// for /start and /news handlers.
 package bot
 
 import (
@@ -9,12 +13,15 @@ import (
 	"github.com/mymmrac/telego"
 )
 
+// Bot represents a Telegram bot instance with its dependencies.
 type Bot struct {
 	bot    *telego.Bot
 	gemini *gemini.Client
 	cfg    config.Config
 }
 
+// New creates a new Bot instance. It initializes the Telegram bot and
+// Gemini client. If bot creation fails, it logs a fatal error.
 func New(cfg config.Config) *Bot {
 	// Create bot instance
 	bot, err := telego.NewBot(cfg.TelegramToken, telego.WithDefaultDebugLogger())
@@ -32,6 +39,8 @@ func New(cfg config.Config) *Bot {
 	}
 }
 
+// Subscribe starts long polling for Telegram updates and returns a channel
+// of updates. The channel is closed when the context is cancelled.
 func (b *Bot) Subscribe(ctx context.Context) (<-chan telego.Update, error) {
 	// Get updates channel via long polling with context
 	params := &telego.GetUpdatesParams{
@@ -40,6 +49,8 @@ func (b *Bot) Subscribe(ctx context.Context) (<-chan telego.Update, error) {
 	return b.bot.UpdatesViaLongPolling(ctx, params)
 }
 
+// Handle processes incoming updates and dispatches commands to handlers.
+// It filters messages from chats other than the configured chat ID.
 func (b *Bot) Handle(ctx context.Context, updates <-chan telego.Update) {
 	chatID := b.cfg.ChatID
 	prompts := b.cfg.Prompts

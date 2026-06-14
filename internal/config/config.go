@@ -1,3 +1,8 @@
+// Package config provides configuration loading from .env and YAML files.
+//
+// It handles environment variables for Telegram bot token, Gemini API keys,
+// chat ID, poll timeout, and log level. Prompts for commands are loaded
+// from a separate YAML file (prompts.yaml).
 package config
 
 import (
@@ -13,6 +18,7 @@ import (
 
 const promptsFile = "prompts.yaml"
 
+// Config holds all configuration for the bot.
 type Config struct {
 	LogLevel string
 
@@ -25,6 +31,8 @@ type Config struct {
 	Prompts *PromptsConfig
 }
 
+// Load reads .env file, parses environment variables, and loads prompts from YAML.
+// It exits with fatal log if required variables are missing or invalid.
 func Load() Config {
 	err := godotenv.Load()
 	if err != nil {
@@ -62,6 +70,9 @@ func Load() Config {
 		log.Fatal("POLL_TIMEOUT is not set")
 	}
 	pollTimeout, err := strconv.Atoi(pollTimeoutStr)
+	if err != nil {
+		log.Fatalf("Invalid POLL_TIMEOUT format: %v", err)
+	}
 
 	// Load prompts
 	prompts, err := loadPrompts(promptsFile)
@@ -85,20 +96,23 @@ func Load() Config {
 	}
 }
 
-type PromptsConfigMessages struct {
+// PromptsConfig contains all prompt templates loaded from YAML.
+type PromptsConfig struct {
+	Messages  promptsConfigMessages   `yaml:"messages"`
+	News      struct{ System string } `yaml:"news"`
+	Interview struct{ System string } `yaml:"interview"`
+}
+
+// PromptsConfigMessages contains message templates for bot responses.
+type promptsConfigMessages struct {
 	Recording string `yaml:"recording"`
 	Error     string `yaml:"error"`
 	Welcome   string `yaml:"welcome"`
 }
 
-type PromptsConfig struct {
-	Messages  PromptsConfigMessages   `yaml:"messages"`
-	News      struct{ System string } `yaml:"news"`
-	Interview struct{ System string } `yaml:"interview"`
-}
-
-// loadPrompts reads and parses the prompts YAML file
+// loadPrompts reads and parses the prompts YAML file at the given path.
 func loadPrompts(path string) (*PromptsConfig, error) {
+	// #nosec G304 — prompts file path is configured by the developer
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read prompts file: %w", err)
