@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
@@ -21,6 +22,13 @@ const configFile = "config.yaml"
 type SecretsConfig struct {
 	GeminiKey     string
 	TelegramToken string
+}
+
+// NATSConfig holds sensitive NATS connection credentials
+type NATSConfig struct {
+	Host  string
+	Port  int
+	Token string
 }
 
 // TelegramConfig holds non-sensitive Telegram settings from config.yaml.
@@ -55,6 +63,7 @@ type ProfanityConfig struct {
 // Config holds all configuration for the bot.
 type Config struct {
 	Secrets  SecretsConfig  `yaml:"-"`
+	NATS     NATSConfig     `yaml:"-"`
 	Bot      BotConfig      `yaml:"bot"`
 	Telegram TelegramConfig `yaml:"telegram"`
 	Gemini   GeminiConfig   `yaml:"gemini"`
@@ -70,25 +79,27 @@ func Load() *Config {
 		log.Fatal("Error loading .env file")
 	}
 
-	geminiKey := os.Getenv("GEMINI_API_KEY")
-	if geminiKey == "" {
-		log.Fatalf("GEMINI_API_KEY is not set")
-	}
-
-	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	if telegramToken == "" {
-		log.Fatal("TELEGRAM_BOT_TOKEN is not set")
-	}
-
-	// Load config
+	// Load config from file
 	cfg, err := loadConfig(configFile)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
+	// Append from env
 	cfg.Secrets = SecretsConfig{
-		GeminiKey:     geminiKey,
-		TelegramToken: telegramToken,
+		GeminiKey:     os.Getenv("GEMINI_API_KEY"),
+		TelegramToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
+	}
+
+	cfg.NATS = NATSConfig{
+		Host:  os.Getenv("NATS_HOST"),
+		Port:  parsePort(os.Getenv("NATS_PORT")),
+		Token: os.Getenv("NATS_TOKEN"),
+	}
+
+	// Validation
+	if cfg.Secrets.TelegramToken == "" {
+		log.Fatal("TELEGRAM_BOT_TOKEN is not set")
 	}
 
 	return cfg
@@ -122,4 +133,9 @@ func loadConfig(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func parsePort(s string) int {
+	p, _ := strconv.Atoi(s)
+	return p
 }
